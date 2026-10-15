@@ -15,6 +15,11 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Feather } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import { Anton_400Regular } from '@expo-google-fonts/anton/400Regular';
+import { Archivo_400Regular } from '@expo-google-fonts/archivo/400Regular';
+import { Archivo_600SemiBold } from '@expo-google-fonts/archivo/600SemiBold';
+import { Archivo_700Bold } from '@expo-google-fonts/archivo/700Bold';
 
 // ─────────────────────────────────────────────────────────────
 // 1. PRIORITY TIERS
@@ -24,9 +29,9 @@ import { Feather } from '@expo/vector-icons';
 const TIERS = ['high', 'medium', 'low'];
 
 const TIER_INFO = {
-  high: { label: 'High', color: '#E5484D' },
-  medium: { label: 'Medium', color: '#D98A00' },
-  low: { label: 'Low', color: '#3E63DD' },
+  high: { label: 'High', color: '#FF5A36' },
+  medium: { label: 'Medium', color: '#FFC83D' },
+  low: { label: 'Low', color: '#B4E8BC' },
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -52,7 +57,7 @@ function isTierUnlocked(tier, tasks) {
   return getBlockers(tier, tasks).length === 0;
 }
 
-// The short line under a locked tier, e.g. "Finish 2 High tasks first".
+// The short line on a locked tier, e.g. "Finish 2 High tasks first".
 function lockHint(tier, tasks) {
   const blockers = getBlockers(tier, tasks);
   const n = blockers.length;
@@ -83,11 +88,18 @@ function todayLabel() {
 }
 
 let nextId = 1;
+const NATIVE = Platform.OS !== 'web';
 
 // ─────────────────────────────────────────────────────────────
 // SCREEN
 // ─────────────────────────────────────────────────────────────
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Anton_400Regular,
+    Archivo_400Regular,
+    Archivo_600SemiBold,
+    Archivo_700Bold,
+  });
   const [tasks, setTasks] = useState([]);
   const [day, setDay] = useState(todayKey());
   const [banner, setBanner] = useState(null);
@@ -129,9 +141,8 @@ export default function App() {
     );
     prevUnlocked.current = unlocked;
     if (opened) {
-      const message = `${TIER_INFO[opened].label} unlocked`;
-      setBanner({ message, key: Date.now() });
-      AccessibilityInfo.announceForAccessibility(message);
+      setBanner({ tier: opened, key: Date.now() });
+      AccessibilityInfo.announceForAccessibility(`${TIER_INFO[opened].label} unlocked`);
     }
   });
 
@@ -150,28 +161,28 @@ export default function App() {
     );
   }
 
-  const doneCount = tasks.filter((t) => t.done).length;
+  if (!fontsLoaded) return <View style={styles.safe} />;
 
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <StatusBar style="dark" />
+        <StatusBar style="light" />
         <KeyboardAvoidingView
           style={styles.frame}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <Header doneCount={doneCount} total={tasks.length} />
-
           <ScrollView
             style={styles.list}
             contentContainerStyle={styles.listContent}
             keyboardShouldPersistTaps="handled"
           >
+            <Header tasks={tasks} unlocked={unlocked} />
+
             {tasks.length === 0 ? (
               <EmptyState />
             ) : (
               TIERS.map((tier) => (
-                <TierSection
+                <TierCard
                   key={tier}
                   tier={tier}
                   tasks={tasks.filter((t) => t.priority === tier)}
@@ -184,7 +195,7 @@ export default function App() {
           </ScrollView>
 
           <View>
-            {banner && <UnlockBanner key={banner.key} message={banner.message} />}
+            {banner && <UnlockBanner key={banner.key} tier={banner.tier} />}
             <Composer onAdd={addTask} />
           </View>
         </KeyboardAvoidingView>
@@ -197,109 +208,155 @@ export default function App() {
 // COMPONENTS
 // ─────────────────────────────────────────────────────────────
 
-function Header({ doneCount, total }) {
-  const progress = total === 0 ? 0 : doneCount / total;
+// Date, big title, done count, and the notch bar: one notch per task,
+// in tier order, filled with the tier colour once the task is done.
+function Header({ tasks, unlocked }) {
+  const done = tasks.filter((t) => t.done).length;
+  const ordered = TIERS.flatMap((tier) => tasks.filter((t) => t.priority === tier));
+
   return (
     <View style={styles.header}>
-      <Text style={styles.date}>{todayLabel()}</Text>
+      <Text style={styles.eyebrow}>{todayLabel()}</Text>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Today</Text>
-        <Text style={styles.count}>
-          {doneCount} of {total} done
+        <Text style={styles.display} accessibilityRole="header">
+          Today
         </Text>
+        <View style={styles.score}>
+          <Text style={styles.scoreNum}>
+            {done}
+            <Text style={styles.scoreOf}>/{tasks.length}</Text>
+          </Text>
+          <Text style={styles.scoreLabel}>done</Text>
+        </View>
       </View>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${progress * 100}%` }]} />
+
+      <View style={styles.notches}>
+        {ordered.length === 0 ? (
+          <View style={[styles.notch, styles.notchEmpty]} />
+        ) : (
+          ordered.map((task) => (
+            <Notch
+              key={task.id}
+              done={task.done}
+              locked={!unlocked[task.priority]}
+              color={TIER_INFO[task.priority].color}
+            />
+          ))
+        )}
       </View>
     </View>
   );
+}
+
+function Notch({ done, locked, color }) {
+  const fill = useRef(new Animated.Value(done ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(fill, { toValue: done ? 1 : 0, duration: 240, useNativeDriver: false }).start();
+  }, [done]);
+  const backgroundColor = fill.interpolate({
+    inputRange: [0, 1],
+    outputRange: [locked ? '#1E211E' : '#343A34', color],
+  });
+  return <Animated.View style={[styles.notch, { backgroundColor }]} />;
 }
 
 function EmptyState() {
+  const steps = [
+    ['high', 'Add the tasks that matter most as High.'],
+    ['medium', 'Finish them and Medium opens.'],
+    ['low', 'Finish Medium and Low opens.'],
+  ];
   return (
     <View style={styles.empty}>
-      <Text style={styles.emptyTitle}>Nothing on today yet</Text>
-      <Text style={styles.emptyText}>
-        Add your most important task first and mark it High. Medium and Low tasks stay locked
-        until every High task is done.
-      </Text>
+      <Text style={styles.emptyTitle}>What has to get done today?</Text>
+      {steps.map(([tier, text], i) => (
+        <View key={tier} style={styles.step}>
+          <View style={[styles.stepNum, { backgroundColor: TIER_INFO[tier].color }]}>
+            <Text style={styles.stepNumText}>{i + 1}</Text>
+          </View>
+          <Text style={styles.stepText}>{text}</Text>
+        </View>
+      ))}
     </View>
   );
 }
 
-function TierSection({ tier, tasks, unlocked, hint, onToggle }) {
+function TierCard({ tier, tasks, unlocked, hint, onToggle }) {
   const info = TIER_INFO[tier];
+  const done = tasks.filter((t) => t.done).length;
 
-  // Fade the tasks in and give the header a small bump
-  // when the tier unlocks.
-  const fade = useRef(new Animated.Value(unlocked ? 1 : 0.45)).current;
+  // 0 = locked, 1 = unlocked. Drives the band colour, the task fade,
+  // and a small bump on the card the moment it opens.
+  const open = useRef(new Animated.Value(unlocked ? 1 : 0)).current;
   const bump = useRef(new Animated.Value(1)).current;
   const wasUnlocked = useRef(unlocked);
 
   useEffect(() => {
-    Animated.timing(fade, {
-      toValue: unlocked ? 1 : 0.45,
-      duration: 260,
-      useNativeDriver: Platform.OS !== 'web',
+    Animated.timing(open, {
+      toValue: unlocked ? 1 : 0,
+      duration: 320,
+      useNativeDriver: false,
     }).start();
     if (unlocked && !wasUnlocked.current) {
-      bump.setValue(0.9);
-      Animated.spring(bump, {
-        toValue: 1,
-        friction: 4,
-        tension: 160,
-        useNativeDriver: Platform.OS !== 'web',
-      }).start();
+      bump.setValue(0.96);
+      Animated.spring(bump, { toValue: 1, friction: 4, tension: 140, useNativeDriver: NATIVE }).start();
     }
     wasUnlocked.current = unlocked;
   }, [unlocked]);
 
+  const bandColor = open.interpolate({ inputRange: [0, 1], outputRange: ['#232723', info.color] });
+  const taskOpacity = open.interpolate({ inputRange: [0, 1], outputRange: [0.5, 1] });
+  const ink = unlocked ? INK : '#8C918A';
+
   return (
-    <View style={styles.section}>
-      <Animated.View style={[styles.sectionHead, { transform: [{ scale: bump }] }]}>
-        <View style={[styles.dot, { backgroundColor: unlocked ? info.color : '#9AA0A8' }]} />
-        <Text style={styles.sectionTitle}>{info.label}</Text>
-        <Feather
-          name={unlocked ? 'unlock' : 'lock'}
-          size={14}
-          color={unlocked ? '#6B7079' : '#15171C'}
-          style={styles.lockIcon}
-        />
-        {hint && <Text style={styles.hint}>{hint}</Text>}
+    <Animated.View style={[styles.card, { transform: [{ scale: bump }] }]}>
+      <Animated.View style={[styles.band, { backgroundColor: bandColor }]}>
+        <Text style={[styles.bandLabel, { color: ink }]}>{info.label}</Text>
+        <View style={styles.bandRight}>
+          {tasks.length > 0 && (
+            <Text style={[styles.bandCount, { color: ink }]}>
+              {done}/{tasks.length}
+            </Text>
+          )}
+          <Feather name={unlocked ? 'unlock' : 'lock'} size={18} color={ink} />
+        </View>
       </Animated.View>
 
-      <Animated.View style={{ opacity: fade }}>
+      {hint && (
+        <View style={styles.hintRow}>
+          <Feather name="corner-left-up" size={14} color={info.color} />
+          <Text style={styles.hint}>{hint}</Text>
+        </View>
+      )}
+
+      <Animated.View style={{ opacity: taskOpacity }}>
         {tasks.length === 0 ? (
           <Text style={styles.none}>No {info.label.toLowerCase()} tasks</Text>
         ) : (
-          tasks.map((task) => (
+          tasks.map((task, i) => (
             <TaskRow
               key={task.id}
               task={task}
               color={info.color}
               locked={!unlocked}
+              first={i === 0}
               onToggle={() => onToggle(task.id)}
             />
           ))
         )}
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
-function TaskRow({ task, color, locked, onToggle }) {
+function TaskRow({ task, color, locked, first, onToggle }) {
   const pop = useRef(new Animated.Value(1)).current;
 
   function handlePress() {
-    // Small pop on the check circle when a task is completed.
+    // Small pop on the check box when a task is completed.
     if (!task.done) {
-      pop.setValue(0.6);
-      Animated.spring(pop, {
-        toValue: 1,
-        friction: 3,
-        tension: 200,
-        useNativeDriver: Platform.OS !== 'web',
-      }).start();
+      pop.setValue(0.55);
+      Animated.spring(pop, { toValue: 1, friction: 3, tension: 220, useNativeDriver: NATIVE }).start();
     }
     onToggle();
   }
@@ -311,24 +368,22 @@ function TaskRow({ task, color, locked, onToggle }) {
       accessibilityRole="checkbox"
       accessibilityState={{ checked: task.done, disabled: locked }}
       accessibilityLabel={locked ? `${task.title}, locked` : task.title}
-      style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+      style={({ pressed }) => [styles.row, !first && styles.rowDivider, pressed && styles.rowPressed]}
     >
       <Animated.View
         style={[
           styles.check,
-          { borderColor: locked ? '#C4C8CE' : color, transform: [{ scale: pop }] },
-          task.done && { backgroundColor: locked ? '#C4C8CE' : color },
+          { borderColor: locked ? '#3A3F3A' : color, transform: [{ scale: pop }] },
+          task.done && { backgroundColor: locked ? '#3A3F3A' : color },
         ]}
       >
         {task.done ? (
-          <Feather name="check" size={15} color="#FFFFFF" />
+          <Feather name="check" size={16} color={INK} />
         ) : locked ? (
-          <Feather name="lock" size={12} color="#9AA0A8" />
+          <Feather name="lock" size={12} color="#6E736C" />
         ) : null}
       </Animated.View>
-      <Text
-        style={[styles.taskTitle, task.done && styles.taskDone, locked && styles.taskLocked]}
-      >
+      <Text style={[styles.taskTitle, task.done && styles.taskDone, locked && styles.taskLocked]}>
         {task.title}
       </Text>
     </Pressable>
@@ -348,24 +403,21 @@ function Composer({ onAdd }) {
 
   return (
     <View style={styles.composer}>
-      <View style={styles.pills}>
+      <View style={styles.chips}>
         {TIERS.map((tier) => {
           const selected = tier === priority;
+          const { color, label } = TIER_INFO[tier];
           return (
             <Pressable
               key={tier}
               onPress={() => setPriority(tier)}
               accessibilityRole="radio"
               accessibilityState={{ selected }}
-              accessibilityLabel={`${TIER_INFO[tier].label} priority`}
-              style={[
-                styles.pill,
-                selected && { backgroundColor: TIER_INFO[tier].color, borderColor: TIER_INFO[tier].color },
-              ]}
+              accessibilityLabel={`${label} priority`}
+              style={[styles.chip, selected && { backgroundColor: color, borderColor: color }]}
             >
-              <Text style={[styles.pillText, selected && styles.pillTextSelected]}>
-                {TIER_INFO[tier].label}
-              </Text>
+              {!selected && <View style={[styles.chipDot, { backgroundColor: color }]} />}
+              <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
             </Pressable>
           );
         })}
@@ -376,9 +428,9 @@ function Composer({ onAdd }) {
           onChangeText={setTitle}
           onSubmitEditing={submit}
           placeholder="Add a task"
-          placeholderTextColor="#8A9099"
+          placeholderTextColor="#6E736C"
           returnKeyType="done"
-          blurOnSubmit={false}
+          submitBehavior="submit"
           style={styles.input}
           accessibilityLabel="New task"
         />
@@ -387,32 +439,28 @@ function Composer({ onAdd }) {
           disabled={!canAdd}
           accessibilityRole="button"
           accessibilityLabel="Add task"
-          style={[styles.addButton, !canAdd && styles.addButtonOff]}
+          style={({ pressed }) => [
+            styles.addButton,
+            !canAdd && styles.addButtonOff,
+            pressed && canAdd && styles.addButtonPressed,
+          ]}
         >
-          <Feather name="arrow-up" size={20} color="#FFFFFF" />
+          <Feather name="arrow-up" size={22} color={canAdd ? INK : '#6E736C'} />
         </Pressable>
       </View>
     </View>
   );
 }
 
-function UnlockBanner({ message }) {
+// Slides up above the composer in the colour of the tier that opened.
+function UnlockBanner({ tier }) {
   const slide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.sequence([
-      Animated.spring(slide, {
-        toValue: 1,
-        friction: 6,
-        tension: 120,
-        useNativeDriver: Platform.OS !== 'web',
-      }),
-      Animated.delay(1400),
-      Animated.timing(slide, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: Platform.OS !== 'web',
-      }),
+      Animated.spring(slide, { toValue: 1, friction: 6, tension: 120, useNativeDriver: NATIVE }),
+      Animated.delay(1500),
+      Animated.timing(slide, { toValue: 0, duration: 200, useNativeDriver: NATIVE }),
     ]).start();
   }, []);
 
@@ -422,138 +470,185 @@ function UnlockBanner({ message }) {
       style={[
         styles.banner,
         {
+          backgroundColor: TIER_INFO[tier].color,
           opacity: slide,
-          transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [-16, 0] }) }],
+          transform: [{ translateY: slide.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
         },
       ]}
     >
-      <Feather name="unlock" size={16} color="#FFFFFF" />
-      <Text style={styles.bannerText}>{message}</Text>
+      <Feather name="unlock" size={20} color={INK} />
+      <Text style={styles.bannerText}>{TIER_INFO[tier].label} unlocked</Text>
     </Animated.View>
   );
 }
 
 // ─────────────────────────────────────────────────────────────
 // STYLES
+// Flat colours only. Anton for display type, Archivo for text.
 // ─────────────────────────────────────────────────────────────
-const INK = '#15171C';
-const MUTED = '#6B7079';
-const LINE = '#E2E4E8';
+const BG = '#111311';
+const SURFACE = '#1A1D1A';
+const LINE = '#2A2E2A';
+const TEXT = '#F2F1EA';
+const MUTED = '#9A9F98';
+const INK = '#111311';
+const DISPLAY = 'Anton_400Regular';
+const BODY = 'Archivo_400Regular';
+const BODY_SEMI = 'Archivo_600SemiBold';
+const BODY_BOLD = 'Archivo_700Bold';
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#F1F2F4' },
+  safe: { flex: 1, backgroundColor: BG },
   frame: { flex: 1, width: '100%', maxWidth: 520, alignSelf: 'center' },
-
-  header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
-  date: { fontSize: 14, color: MUTED, fontWeight: '500' },
-  headerRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  title: { fontSize: 36, fontWeight: '800', color: INK, letterSpacing: -1 },
-  count: { fontSize: 14, color: MUTED, fontVariant: ['tabular-nums'] },
-  track: { height: 4, borderRadius: 2, backgroundColor: LINE, marginTop: 12, overflow: 'hidden' },
-  fill: { height: 4, backgroundColor: INK },
-
   list: { flex: 1 },
-  listContent: { paddingHorizontal: 16, paddingBottom: 24 },
+  listContent: { paddingHorizontal: 16, paddingBottom: 28 },
 
-  empty: { paddingHorizontal: 4, paddingTop: 40 },
-  emptyTitle: { fontSize: 18, fontWeight: '700', color: INK, marginBottom: 6 },
-  emptyText: { fontSize: 15, lineHeight: 22, color: MUTED, maxWidth: 360 },
-
-  section: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 6,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: LINE,
+  header: { paddingTop: 18, paddingBottom: 8, paddingHorizontal: 4 },
+  eyebrow: {
+    fontFamily: BODY_SEMI,
+    fontSize: 12,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: MUTED,
   },
-  sectionHead: {
+  headerRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  display: {
+    fontFamily: DISPLAY,
+    fontSize: 72,
+    lineHeight: 80,
+    color: TEXT,
+    textTransform: 'uppercase',
+  },
+  score: { alignItems: 'flex-end', paddingBottom: 10 },
+  scoreNum: { fontFamily: DISPLAY, fontSize: 40, lineHeight: 44, color: TEXT },
+  scoreOf: { color: '#5E635C' },
+  scoreLabel: {
+    fontFamily: BODY_SEMI,
+    fontSize: 12,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: MUTED,
+  },
+  notches: { flexDirection: 'row', gap: 4, marginTop: 6 },
+  notch: { flex: 1, height: 12, borderRadius: 3 },
+  notchEmpty: { backgroundColor: '#1E211E' },
+
+  empty: { marginTop: 24, paddingHorizontal: 4 },
+  emptyTitle: {
+    fontFamily: DISPLAY,
+    fontSize: 34,
+    lineHeight: 40,
+    color: TEXT,
+    textTransform: 'uppercase',
+    marginBottom: 20,
+  },
+  step: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
+  stepNum: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
+  },
+  stepNumText: { fontFamily: DISPLAY, fontSize: 18, color: INK },
+  stepText: { flex: 1, fontFamily: BODY, fontSize: 16, lineHeight: 22, color: TEXT },
+
+  card: { backgroundColor: SURFACE, borderRadius: 18, marginTop: 14, overflow: 'hidden' },
+  band: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 4,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
-  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  sectionTitle: { fontSize: 13, fontWeight: '700', color: INK, letterSpacing: 0.4, textTransform: 'uppercase' },
-  lockIcon: { marginLeft: 6 },
-  hint: { fontSize: 13, color: INK, marginLeft: 8 },
-  none: { fontSize: 14, color: '#9AA0A8', paddingHorizontal: 14, paddingVertical: 10 },
-
-  row: {
+  bandLabel: { fontFamily: DISPLAY, fontSize: 26, lineHeight: 32, textTransform: 'uppercase' },
+  bandRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bandCount: { fontFamily: BODY_BOLD, fontSize: 15, fontVariant: ['tabular-nums'] },
+  hintRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 2,
   },
-  rowPressed: { backgroundColor: '#F6F7F8' },
+  hint: { fontFamily: BODY_SEMI, fontSize: 14, color: TEXT },
+  none: { fontFamily: BODY, fontSize: 15, color: '#6E736C', paddingHorizontal: 16, paddingVertical: 16 },
+
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 56, paddingHorizontal: 16, paddingVertical: 10 },
+  rowDivider: { borderTopWidth: 1, borderTopColor: LINE },
+  rowPressed: { backgroundColor: '#212521' },
   check: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 14,
   },
-  taskTitle: { flex: 1, fontSize: 16, lineHeight: 22, color: INK },
-  taskDone: { color: '#9AA0A8', textDecorationLine: 'line-through' },
-  taskLocked: { color: '#9AA0A8' },
+  taskTitle: { flex: 1, fontFamily: BODY, fontSize: 17, lineHeight: 23, color: TEXT },
+  taskDone: { color: '#6E736C', textDecorationLine: 'line-through' },
+  taskLocked: { color: '#7A7F78' },
 
   composer: {
-    borderTopWidth: 1,
-    borderTopColor: LINE,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: SURFACE,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 14,
   },
-  pills: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  pill: {
+  chips: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     minHeight: 44,
     paddingHorizontal: 16,
     borderRadius: 22,
-    borderWidth: 1,
-    borderColor: LINE,
-    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#343A34',
   },
-  pillText: { fontSize: 14, fontWeight: '600', color: MUTED },
-  pillTextSelected: { color: '#FFFFFF' },
+  chipDot: { width: 8, height: 8, borderRadius: 4 },
+  chipText: { fontFamily: BODY_SEMI, fontSize: 15, color: TEXT },
+  chipTextSelected: { color: INK },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   input: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 12,
-    backgroundColor: '#F1F2F4',
-    paddingHorizontal: 14,
-    fontSize: 16,
-    color: INK,
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: BG,
+    paddingHorizontal: 16,
+    fontFamily: BODY,
+    fontSize: 17,
+    color: TEXT,
   },
   addButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: INK,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: TEXT,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addButtonOff: { backgroundColor: '#B8BCC3' },
+  addButtonOff: { backgroundColor: '#262A26' },
+  addButtonPressed: { transform: [{ scale: 0.94 }] },
 
   banner: {
     position: 'absolute',
     bottom: '100%',
+    left: 16,
+    right: 16,
     marginBottom: 12,
     zIndex: 1,
-    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: INK,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 22,
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
-  bannerText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  bannerText: { fontFamily: DISPLAY, fontSize: 22, color: INK, textTransform: 'uppercase' },
 });

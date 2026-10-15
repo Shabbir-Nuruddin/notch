@@ -5,7 +5,8 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#111311",
     "ios": {
       "supportsTablet": true
     },
@@ -19,7 +20,8 @@
     },
     "web": {
       "favicon": "./assets/favicon.png",
-      "output": "single"
+      "output": "single",
+      "backgroundColor": "#111311"
     },
     "plugins": [
       "expo-font"
