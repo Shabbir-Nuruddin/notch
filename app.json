@@ -3,28 +3,57 @@
     "name": "Notch",
     "slug": "notch",
     "version": "1.0.0",
+    "scheme": "notch",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "backgroundColor": "#111311",
+    "backgroundColor": "#000000",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.notchplanner.app"
     },
     "android": {
+      "package": "com.notchplanner.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
-      }
+      },
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
       "output": "single",
-      "backgroundColor": "#111311"
+      "backgroundColor": "#000000"
     },
     "plugins": [
-      "expo-font"
-    ]
+      "expo-font",
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#FF6A3D",
+          "sounds": ["./assets/sounds/notch_alarm.wav"]
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Notch listens while you tell it your tasks for the day.",
+          "speechRecognitionPermission": "Notch turns what you say into your task list.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }

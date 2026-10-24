@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="notch_guard_label">Notch app blocking</string>
+  <string name="notch_guard_description">Lets Notch see which app you open, so it can send you back to your task when you open an app you chose to block. Notch does not read what is on your screen or what you type, and nothing leaves your phone.</string>
+</resources>
