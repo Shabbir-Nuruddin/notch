@@ -41,7 +41,7 @@ export default function Keys() {
   return (
     <Screen title="AI planning">
       <Text style={[type.sub, { marginTop: 8 }]}>
-        Notch plans with Google Gemini. Without a key it uses simple offline rules. Add one or more free keys; when one hits its limit, the next is used.
+        Notch plans with Google Gemini through its own server, so you don’t need a key. Adding your own free keys is optional: they’re used first, and when one hits its limit the next takes over. If Gemini can’t be reached, simple offline rules plan the day.
       </Text>
 
       <Group title="Your keys" footer={builtIn ? `Plus ${builtIn} built into this build.` : null}>

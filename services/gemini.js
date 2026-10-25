@@ -14,8 +14,11 @@
 //   2. keys pasted in the app's settings (saved on this device)
 //
 // EXPO_PUBLIC_ values are inlined into the JS bundle, so anyone with
-// the built app can read them. Fine for testing; before a public
-// release, move the call behind a small server.
+// the built app can read them. Fine for testing only.
+//
+// With no key at all, calls go to Notch's own server (api/gemini.mjs),
+// which holds the keys. That's the normal path for everyone using the
+// public site.
 // ─────────────────────────────────────────────────────────────
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -31,6 +34,15 @@ export const MODELS = unique([
 ]);
 
 const TIMEOUT_MS = 60 * 1000;
+
+// On the web the server is the site itself. A phone build needs the
+// site's address in EXPO_PUBLIC_API_URL (e.g. https://notch.vercel.app).
+const SERVER =
+  typeof window !== 'undefined' && window.location?.origin?.startsWith('http')
+    ? '/api/gemini'
+    : process.env.EXPO_PUBLIC_API_URL
+      ? `${process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '')}/api/gemini`
+      : null;
 
 let userKeys = [];
 let cursor = 0;
@@ -70,9 +82,7 @@ export function maskKey(key) {
 // Returns { data, model, key } where key is masked.
 export async function generateJSON({ system, prompt, schema, temperature = 0.4 }) {
   const keys = getKeyPool();
-  if (keys.length === 0) {
-    throw new GeminiError('NO_KEYS', 'No Gemini API keys are set.');
-  }
+  if (keys.length === 0) return viaServer({ system, prompt, schema, temperature });
 
   const body = {
     systemInstruction: { parts: [{ text: system }] },
@@ -123,6 +133,35 @@ export async function generateJSON({ system, prompt, schema, temperature = 0.4 }
   }
 
   throw new GeminiError('ALL_FAILED', summarise(attempts), attempts);
+}
+
+// No key of our own: ask Notch's server. A server that isn't there
+// (local dev, or a phone build without EXPO_PUBLIC_API_URL) or has no
+// keys counts as NO_KEYS, so the offline rules take over.
+async function viaServer({ system, prompt, schema, temperature }) {
+  if (!SERVER) throw new GeminiError('NO_KEYS', 'No Gemini API keys are set.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let response;
+  let json = null;
+  try {
+    response = await fetch(SERVER, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system, prompt, schema, temperature }),
+      signal: controller.signal,
+    });
+    json = await response.json().catch(() => null);
+  } catch (error) {
+    throw new GeminiError('ALL_FAILED', error.name === 'AbortError' ? 'Gemini timed out.' : 'Notch’s server is unreachable.');
+  } finally {
+    clearTimeout(timer);
+  }
+  if (response.ok && json?.data) return { data: json.data, model: json.model, key: 'server' };
+  if (response.status === 404 || json?.code === 'NO_KEYS' || !json) {
+    throw new GeminiError('NO_KEYS', 'No Gemini API keys are set.');
+  }
+  throw new GeminiError('ALL_FAILED', json.error ?? 'Gemini failed.');
 }
 
 // Checks every key with a tiny request. Used by "Test keys" in settings.

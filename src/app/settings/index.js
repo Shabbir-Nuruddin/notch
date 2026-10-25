@@ -119,7 +119,7 @@ export default function Settings() {
 
       <Group title="Focus">
         <Row icon="lock" label="App blocking" value={blockingValue} onPress={() => router.push('/settings/blocking')} />
-        <Row icon="cpu" label="AI planning" value={keys.length ? `${keys.length} ${keys.length === 1 ? 'key' : 'keys'}` : 'Offline'} onPress={() => router.push('/settings/keys')} />
+        <Row icon="cpu" label="AI planning" value={keys.length ? `${keys.length} ${keys.length === 1 ? 'key' : 'keys'}` : 'Built in'} onPress={() => router.push('/settings/keys')} />
       </Group>
 
       <Group title="Your data" footer="Everything is stored on this device only.">

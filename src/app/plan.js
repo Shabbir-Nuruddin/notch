@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -9,7 +9,7 @@ import { Button, IconButton, Screen, Segmented, useReducedMotion } from '../../c
 import { dayInsight } from '../../services/insight';
 import { EVERY_DAY, WEEKDAYS, daysLabel, findRoutine, routinesOn } from '../../services/routines';
 import { classifyTask, splitBrainDump } from '../../services/taskClassifier';
-import { extractTasks } from '../../services/taskExtractor';
+import { applyCorrections, extractTasks, offlineExtract } from '../../services/taskExtractor';
 import { clockLabel, dateFromKey, dateKey, isTask, isVerified } from '../../services/taskEngine';
 import { hush, listen, say, voiceAvailable } from '../../services/voice';
 import { useNotch } from '../../state/notch';
@@ -25,7 +25,7 @@ export default function Plan() {
 
 function PlanScreen() {
   const params = useLocalSearchParams();
-  const { plans, inbox, plan, profile, routines, saveRoutine } = useNotch();
+  const { plans, inbox, plan, profile, routines, saveRoutine, corrections, learnCorrection } = useNotch();
   const [day, setDay] = useState(params.day === 'tomorrow' ? 'tomorrow' : 'today');
   const key = dateKey(day === 'today' ? 0 : 1);
 
@@ -47,6 +47,7 @@ function PlanScreen() {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [editing, setEditing] = useState(null); // item whose repeat days are open
+  const [renaming, setRenaming] = useState(null); // index of the item being renamed
   const stopRef = useRef(null);
   const transcriptRef = useRef(''); // everything said this session
   const itemsRef = useRef(items);
@@ -70,6 +71,37 @@ function PlanScreen() {
     setItems((list) => dedupe([...seedFor(next), ...list.filter((t) => !oldSeed.includes(t.toLowerCase()))]));
     setDay(next);
     setEditing(null);
+    setRenaming(null);
+  };
+
+  // A rename is remembered, so the same words come out this way next
+  // time. A repeating task keeps its days under the new name.
+  const renameItem = (i, text) => {
+    const old = items[i];
+    const clean = text.trim().replace(/\s+/g, ' ');
+    setRenaming(null);
+    setEditing(null);
+    if (!clean) {
+      setItems((list) => list.filter((_, k) => k !== i));
+      return;
+    }
+    const next = clean[0].toUpperCase() + clean.slice(1);
+    if (next === old) return;
+    setItems((list) => dedupe(list.map((t, k) => (k === i ? next : t))));
+    learnCorrection(old, next);
+    const routine = findRoutine(routines, old);
+    if (routine && old.toLowerCase() !== next.toLowerCase()) {
+      saveRoutine(next, routine.days);
+      saveRoutine(old, []);
+    }
+  };
+
+  // For one task that was heard as two: "Book a meeting" + "With my
+  // boss". Opens the joined task for renaming so it can be tidied.
+  const joinWithNext = (i) => {
+    setItems((list) => (i + 1 < list.length ? [...list.slice(0, i), `${list[i]} ${lowerFirst(list[i + 1])}`, ...list.slice(i + 2)] : list));
+    setEditing(null);
+    setRenaming(i);
   };
 
   // Everything said goes to Gemini once listening stops. It strips
@@ -81,7 +113,7 @@ function PlanScreen() {
     if (!said) return;
     setSorting(true);
     try {
-      const { tasks, notice } = await extractTasks(said, itemsRef.current);
+      const { tasks, notice } = await extractTasks(said, itemsRef.current, corrections);
       const weekday = dateFromKey(key).getDay();
       const repeating = tasks.filter((t) => t.days);
       repeating.forEach((t) => saveRoutine(t.title, t.days));
@@ -101,6 +133,7 @@ function PlanScreen() {
     }
     setError(null);
     setNote(null);
+    setRenaming(null);
     setHeard('');
     transcriptRef.current = '';
     setListening(true);
@@ -142,14 +175,21 @@ function PlanScreen() {
     }
   };
 
+  // Tasks heard so far, by the quick offline rules, shown while talking.
+  // The full sort runs once listening stops.
+  const live = useMemo(
+    () => (listening && heard ? applyCorrections(offlineExtract(heard), corrections).map((t) => t.title) : []),
+    [listening, heard, corrections]
+  );
+
   if (result) return <Planned result={result} day={day} dateKeyStr={key} />;
 
   const repeatCount = items.filter((t) => findRoutine(routines, t)).length;
   const status = sorting
     ? 'Sorting what you said…'
     : listening
-      ? heard.length > 140
-        ? `…${heard.slice(-140)}`
+      ? heard.length > 90
+        ? `…${heard.slice(-90)}`
         : heard || 'Listening… say everything on your mind'
       : items.length
         ? 'Tap to add more'
@@ -174,9 +214,20 @@ function PlanScreen() {
       {canTalk && (
         <View style={styles.micArea}>
           <MicButton listening={listening} sorting={sorting} onPress={toggleListening} />
-          <Text style={[type.sub, styles.heard, listening && heard ? { color: TEXT } : null]} numberOfLines={3}>
+          <Text style={[type.sub, styles.heard, listening && heard ? { color: TEXT } : null]} numberOfLines={2}>
             {status}
           </Text>
+          {live.length > 0 && (
+            <View style={styles.live} accessibilityLiveRegion="polite" accessibilityLabel={`Heard so far: ${live.join(', ')}`}>
+              {live.map((t, i) => (
+                <View key={`${t}-${i}`} style={styles.liveChip}>
+                  <Text style={[type.caption, { color: TEXT }]} numberOfLines={1}>
+                    {t}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
       {error && <Text style={[type.sub, { color: DANGER, textAlign: 'center', marginBottom: 12 }]}>{error}</Text>}
@@ -200,11 +251,24 @@ function PlanScreen() {
             item={item}
             routine={findRoutine(routines, item)}
             editing={editing === item}
-            onEdit={() => setEditing((e) => (e === item ? null : item))}
+            renaming={renaming === i}
+            onStartRename={() => {
+              setEditing(null);
+              setRenaming(i);
+            }}
+            onRename={(text) => renameItem(i, text)}
+            onCancelRename={() => setRenaming(null)}
+            onJoin={i + 1 < items.length ? () => joinWithNext(i) : null}
+            nextItem={items[i + 1]}
+            onEdit={() => {
+              setRenaming(null);
+              setEditing((e) => (e === item ? null : item));
+            }}
             onRepeat={(days) => saveRoutine(item, days)}
             onRemove={() => {
               setItems((list) => list.filter((_, k) => k !== i));
               if (editing === item) setEditing(null);
+              setRenaming(null);
             }}
           />
         ))}
@@ -225,7 +289,9 @@ function PlanScreen() {
         </View>
       </View>
       {items.length > 0 && (
-        <Text style={[type.caption, styles.hint]}>Tap the repeat icon to bring a task back every day or on set days. Everything else stays on this day only.</Text>
+        <Text style={[type.caption, styles.hint]}>
+          Tap a task to rename it or join it with the next one. Tap the repeat icon to bring a task back every day or on set days; everything else stays on this day only.
+        </Text>
       )}
 
       <Button
@@ -243,6 +309,7 @@ function PlanScreen() {
 function sortNote({ tasks, repeating, otherDays, notice, day }) {
   const parts = [];
   if (!tasks.length) parts.push('No specific task in that. Try saying what you’ll do, like “study maths for an hour”.');
+  else parts.push(`Added ${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}. Something off? Tap a task to fix it.`);
   if (repeating.length) {
     parts.push(`Repeating: ${repeating.map((t) => `${t.title} (${daysLabel(t.days).toLowerCase()})`).join(', ')}.`);
   }
@@ -259,19 +326,28 @@ function repeatText(days) {
   return days.length === 7 || label === 'Weekdays' || label === 'Weekends' ? label.toLowerCase() : `on ${label}`;
 }
 
-function PlanItem({ item, routine, editing, onEdit, onRepeat, onRemove }) {
+function PlanItem({ item, routine, editing, renaming, onStartRename, onRename, onCancelRename, onJoin, nextItem, onEdit, onRepeat, onRemove }) {
   const color = networkColor(classifyTask(item).network);
   const days = routine?.days ?? [];
   const toggleDay = (d) => onRepeat(days.includes(d) ? days.filter((x) => x !== d) : [...days, d]);
   const isWeekdays = days.length === 5 && !days.includes(0) && !days.includes(6);
+  if (renaming) {
+    return <RenameItem item={item} color={color} onRename={onRename} onCancel={onCancelRename} onJoin={onJoin} nextItem={nextItem} />;
+  }
   return (
     <View style={styles.itemWrap}>
       <View style={styles.item}>
         <View style={[styles.dot, { backgroundColor: color }]} />
-        <View style={{ flex: 1, paddingVertical: 10 }}>
+        <Pressable
+          onPress={onStartRename}
+          accessibilityRole="button"
+          accessibilityLabel={item}
+          accessibilityHint="Rename this task or join it with the next one"
+          style={({ pressed }) => [{ flex: 1, paddingVertical: 10 }, pressed && { opacity: 0.6 }]}
+        >
           <Text style={type.body}>{item}</Text>
           {routine && <Text style={[type.caption, { color: SPECTRUM[3] }]}>Repeats {repeatText(routine.days)}</Text>}
-        </View>
+        </Pressable>
         <IconButton
           name="repeat"
           size={18}
@@ -299,6 +375,43 @@ function PlanItem({ item, routine, editing, onEdit, onRepeat, onRemove }) {
               : 'Pick the days it should come back on.'}
           </Text>
         </View>
+      )}
+    </View>
+  );
+}
+
+function RenameItem({ item, color, onRename, onCancel, onJoin, nextItem }) {
+  const [text, setText] = useState(item);
+  return (
+    <View style={[styles.itemWrap, { backgroundColor: alpha(color, 0.08) }]}>
+      <View style={styles.item}>
+        <View style={[styles.dot, { backgroundColor: color }]} />
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          onSubmitEditing={() => onRename(text)}
+          autoFocus
+          selectTextOnFocus
+          returnKeyType="done"
+          submitBehavior="submit"
+          style={styles.input}
+          accessibilityLabel={`Rename ${item}`}
+        />
+        <IconButton name="check" size={18} color={TEXT} label="Save name" onPress={() => onRename(text)} />
+        <IconButton name="x" size={18} color={MUTED} label="Cancel" onPress={onCancel} />
+      </View>
+      {onJoin && (
+        <Pressable
+          onPress={onJoin}
+          accessibilityRole="button"
+          accessibilityLabel={`Join with the next task, ${nextItem}`}
+          style={({ pressed }) => [styles.join, pressed && { opacity: 0.7 }]}
+        >
+          <Feather name="git-merge" size={15} color={SPECTRUM[3]} />
+          <Text style={[type.caption, { color: TEXT, flex: 1 }]} numberOfLines={1}>
+            Join with “{nextItem}”
+          </Text>
+        </Pressable>
       )}
     </View>
   );
@@ -427,6 +540,14 @@ function recap(plan, insight, day) {
   return parts.join(' ');
 }
 
+// "With my boss" → "with my boss", for joining onto another task.
+// Leaves "I…" and all-caps words like "GP" alone.
+function lowerFirst(text) {
+  const first = text.split(/\s+/)[0] ?? '';
+  if (first === 'I' || /^I'/.test(first) || (first.length > 1 && first === first.toUpperCase())) return text;
+  return text[0].toLowerCase() + text.slice(1);
+}
+
 function dedupe(list) {
   const seen = new Set();
   return list.filter((item) => {
@@ -442,7 +563,29 @@ const styles = StyleSheet.create({
   micWrap: { width: 132, height: 132, alignItems: 'center', justifyContent: 'center' },
   pulse: { position: 'absolute', width: 112, height: 112, borderRadius: 56, backgroundColor: DANGER },
   mic: { width: 112, height: 112, borderRadius: 56, backgroundColor: TEXT, alignItems: 'center', justifyContent: 'center' },
-  heard: { textAlign: 'center', minHeight: 63, maxWidth: 420 },
+  heard: { textAlign: 'center', minHeight: 42, maxWidth: 420 },
+  live: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, maxWidth: 440 },
+  liveChip: {
+    maxWidth: 220,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: RAISED,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: LINE,
+  },
+  join: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 38,
+    marginRight: 16,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: RAISED,
+  },
   note: {
     flexDirection: 'row',
     gap: 8,

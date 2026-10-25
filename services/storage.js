@@ -15,6 +15,7 @@ const INBOX = 'notch.inbox';
 const UNLOCKS = 'notch.unlocks';
 const ROUTINES = 'notch.routines';
 const HISTORY = 'notch.history';
+const CORRECTIONS = 'notch.corrections';
 
 export const DEFAULT_PROFILE = {
   role: '',
@@ -67,7 +68,7 @@ async function writeJSON(key, value) {
 }
 
 export async function loadAll() {
-  const [profile, plans, keys, inbox, unlocks, routines, history] = await Promise.all([
+  const [profile, plans, keys, inbox, unlocks, routines, history, corrections] = await Promise.all([
     readJSON(PROFILE, null),
     readJSON(PLANS, {}),
     readJSON(KEYS, []),
@@ -75,6 +76,7 @@ export async function loadAll() {
     readJSON(UNLOCKS, { date: '', used: 0, pausedUntil: 0 }),
     readJSON(ROUTINES, []),
     readJSON(HISTORY, {}),
+    readJSON(CORRECTIONS, {}),
   ]);
   return {
     profile: mergeProfile(profile),
@@ -84,6 +86,7 @@ export async function loadAll() {
     unlocks,
     routines: Array.isArray(routines) ? routines : [],
     history: history && typeof history === 'object' ? history : {},
+    corrections: corrections && typeof corrections === 'object' ? corrections : {},
   };
 }
 
@@ -104,19 +107,24 @@ export function saveInbox(inbox) {
   return writeJSON(INBOX, inbox);
 }
 
+// Task names the person has renamed: { [as heard, lower case]: their wording }.
+export function saveCorrections(corrections) {
+  return writeJSON(CORRECTIONS, corrections);
+}
+
 export function saveUnlocks(unlocks) {
   return writeJSON(UNLOCKS, unlocks);
 }
 
 // Everything Notch has stored, for "Export my data". Keys are left out.
 export async function exportAll() {
-  const { profile, plans, inbox, routines, history } = await loadAll();
-  return { exportedAt: new Date().toISOString(), profile, plans, inbox, routines, history };
+  const { profile, plans, inbox, routines, history, corrections } = await loadAll();
+  return { exportedAt: new Date().toISOString(), profile, plans, inbox, routines, history, corrections };
 }
 
 export async function clearAll() {
   try {
-    await AsyncStorage.multiRemove([PROFILE, PLANS, KEYS, INBOX, UNLOCKS, ROUTINES, HISTORY]);
+    await AsyncStorage.multiRemove([PROFILE, PLANS, KEYS, INBOX, UNLOCKS, ROUTINES, HISTORY, CORRECTIONS]);
   } catch {
     // Nothing stored, or storage blocked.
   }

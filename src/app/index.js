@@ -49,6 +49,10 @@ function Today() {
   const behind =
     current && current.status !== STATUS.IN_PROGRESS ? Math.floor((now - epochAt(key, current.start)) / 60000) : 0;
   const dialSize = Math.min(width - 32, 380);
+  // The planning reminder, in the app. Phones also get a notification;
+  // browsers can't schedule one, so this is all the web gets.
+  const planDay = profile.planning.mode === 'night' ? 'tomorrow' : 'today';
+  const planDue = minutesNow(new Date(now)) >= profile.planning.minute && !plans[planDay === 'today' ? today : tomorrow];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
@@ -98,6 +102,19 @@ function Today() {
           )}
 
           {day === 'today' && <QuoteCard />}
+
+          {planDue && (
+            <Pressable
+              onPress={() => router.push(`/plan?day=${planDay}`)}
+              style={styles.guard}
+              accessibilityRole="button"
+              accessibilityLabel={`Time to plan ${planDay}`}
+            >
+              <Feather name="mic" size={16} color={TEXT} />
+              <Text style={[type.sub, { color: TEXT, flex: 1 }]}>Time to plan {planDay}. Say everything you need to do.</Text>
+              <Feather name="chevron-right" size={18} color={MUTED} />
+            </Pressable>
+          )}
 
           {behind >= 45 && (
             <Pressable onPress={() => router.push('/plan?day=today')} style={styles.guard} accessibilityRole="button">

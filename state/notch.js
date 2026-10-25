@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 
 import { planDay } from '../services/planner';
 import { setUserKeys } from '../services/gemini';
-import { DEFAULT_PROFILE, clearAll, loadAll, saveHistory, saveInbox, saveKeys, savePlans, saveProfile, saveRoutines, saveUnlocks } from '../services/storage';
+import { DEFAULT_PROFILE, clearAll, loadAll, saveHistory, saveInbox, saveKeys, savePlans, saveProfile, saveRoutines, saveUnlocks, saveCorrections } from '../services/storage';
 import { createRoutine, findRoutine, normalizeDays } from '../services/routines';
 import { mergeHistory } from '../services/progress';
 import { STATUS, currentBlock, dateKey, isVerified, minutesNow, pushLater, swapWithNext } from '../services/taskEngine';
@@ -49,6 +49,7 @@ export function NotchProvider({ children }) {
   const [unlocks, setUnlocks] = useState(NO_UNLOCKS);
   const [routines, setRoutines] = useState([]);
   const [history, setHistory] = useState({});
+  const [corrections, setCorrections] = useState({});
   const [toast, setToast] = useState(null); // { text, undo?: { date, id } }
   const rung = useRef(new Set()); // blocks that already rang
 
@@ -63,6 +64,7 @@ export function NotchProvider({ children }) {
       setUnlocks({ ...NO_UNLOCKS, ...saved.unlocks });
       setRoutines(saved.routines);
       setHistory(mergeHistory(saved.history, saved.plans));
+      setCorrections(saved.corrections);
       setLoaded(true);
     });
     setupNotifications();
@@ -89,6 +91,9 @@ export function NotchProvider({ children }) {
   useEffect(() => {
     if (loaded) saveHistory(history);
   }, [history, loaded]);
+  useEffect(() => {
+    if (loaded) saveCorrections(corrections);
+  }, [corrections, loaded]);
 
   // ── Keep alarms and blocking in step ───────────────────────
   useEffect(() => {
@@ -229,6 +234,19 @@ export function NotchProvider({ children }) {
     });
   }, []);
 
+  // A rename on the plan screen, remembered so the same words come out
+  // the person's way next time. Newest last; the oldest drop off.
+  const learnCorrection = useCallback((heard, fixed) => {
+    const from = heard.trim().toLowerCase();
+    const to = fixed.trim();
+    if (!from || !to || from === to.toLowerCase()) return;
+    setCorrections((all) => {
+      const { [from]: _old, ...rest } = all;
+      const entries = Object.entries({ ...rest, [from]: to });
+      return Object.fromEntries(entries.slice(-200));
+    });
+  }, []);
+
   const removeRoutine = useCallback((id) => setRoutines((list) => list.filter((r) => r.id !== id)), []);
 
   const setProfile = useCallback((patch) => setProfileState((p) => ({ ...p, ...patch })), []);
@@ -264,6 +282,7 @@ export function NotchProvider({ children }) {
     setInbox([]);
     setRoutines([]);
     setHistory({});
+    setCorrections({});
     setUnlocks(NO_UNLOCKS);
     setProfileState(DEFAULT_PROFILE);
   }, []);
@@ -334,6 +353,8 @@ export function NotchProvider({ children }) {
       unlocksLeft,
       routines,
       history,
+      corrections,
+      learnCorrection,
       saveRoutine,
       removeRoutine,
       toast,
@@ -352,7 +373,7 @@ export function NotchProvider({ children }) {
       emergencyUnlock,
       resetAll,
     }),
-    [loaded, profile, plans, keys, inbox, unlocks, unlocksLeft, routines, history, saveRoutine, removeRoutine, toast, setProfile, setKeys, plan, start, stop, done, undo, later, afterNext, toTomorrow, emergencyUnlock, resetAll]
+    [loaded, profile, plans, keys, inbox, unlocks, unlocksLeft, routines, history, corrections, learnCorrection, saveRoutine, removeRoutine, toast, setProfile, setKeys, plan, start, stop, done, undo, later, afterNext, toTomorrow, emergencyUnlock, resetAll]
   );
 
   return <NotchContext.Provider value={value}>{children}</NotchContext.Provider>;

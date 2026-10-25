@@ -59,24 +59,33 @@ Rules:
 - Skip anything already on their list.`;
 
 // transcript: what was said this time. existing: titles already on the list.
+// corrections: { [title as heard, lower case]: title as they fixed it },
+// learned from renames on the plan screen.
 // → { tasks: [{ title, days: number[] | null }], source: 'gemini' | 'offline', notice }
-export async function extractTasks(transcript, existing = []) {
+export async function extractTasks(transcript, existing = [], corrections = {}) {
   const text = transcript.trim();
   if (!text) return { tasks: [], source: 'offline', notice: null };
+  const fixes = Object.entries(corrections).slice(-40);
   try {
     const { data } = await generateJSON({
       system: SYSTEM,
-      prompt: `ALREADY ON THEIR LIST:\n${existing.length ? existing.map((t) => `- ${t}`).join('\n') : '(nothing)'}\n\nWHAT THEY JUST SAID:\n"""${text}"""`,
+      prompt: [
+        `ALREADY ON THEIR LIST:\n${existing.length ? existing.map((t) => `- ${t}`).join('\n') : '(nothing)'}`,
+        fixes.length ? `HOW THEY'VE RENAMED TASKS BEFORE (use their wording):\n${fixes.map(([a, b]) => `- "${a}" → "${b}"`).join('\n')}` : null,
+        `WHAT THEY JUST SAID:\n"""${text}"""`,
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       schema: SCHEMA,
       temperature: 0.1,
     });
     const tasks = (data?.tasks ?? [])
       .map((t) => ({ title: tidy(String(t.title ?? '')), days: repeatDays(t.repeat, t.days) }))
       .filter((t) => t.title.length > 1);
-    return { tasks, source: 'gemini', notice: null };
+    return { tasks: applyCorrections(tasks, corrections), source: 'gemini', notice: null };
   } catch (error) {
     return {
-      tasks: offlineExtract(text),
+      tasks: applyCorrections(offlineExtract(text), corrections),
       source: 'offline',
       notice:
         error instanceof GeminiError && error.code === 'NO_KEYS'
@@ -84,6 +93,14 @@ export async function extractTasks(transcript, existing = []) {
           : 'Couldn’t reach Gemini, so this was sorted by simple rules.',
     };
   }
+}
+
+// Swaps in the person's own wording for titles they've renamed before.
+export function applyCorrections(tasks, corrections = {}) {
+  return tasks.map((t) => {
+    const fixed = corrections[t.title.trim().toLowerCase()];
+    return fixed ? { ...t, title: fixed } : t;
+  });
 }
 
 function repeatDays(repeat, days) {
