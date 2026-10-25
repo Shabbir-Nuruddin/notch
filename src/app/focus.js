@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { BlockActions, NetworkTag, blockClock } from '../../components/NowPanel';
+import { Scenery } from '../../components/Scenery';
 import { Button, IconButton, MAX_WIDTH } from '../../components/ui';
 import { EMERGENCY_UNLOCK_MINUTES, guardState } from '../../services/guard';
 import { STATUS, currentBlock, dateKey } from '../../services/taskEngine';
@@ -28,6 +29,7 @@ export default function Focus() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <Scenery />
       <View style={styles.top}>
         <IconButton name="chevron-down" label="Close" onPress={close} />
       </View>

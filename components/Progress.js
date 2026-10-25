@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Animated, Easing, LayoutAnimation, Platform, Pressable, StyleSheet, Text, UIManager, View } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
 import { STATUS, clockLabel, isTask, isVerified } from '../services/taskEngine';
 import { useNotch } from '../state/notch';
@@ -9,7 +9,7 @@ import { useReducedMotion } from './ui';
 
 // ─────────────────────────────────────────────────────────────
 // PROGRESS PIECES
-// Ring, glow, checklist and trend bars. Finishing a task should feel
+// Ring, bar, checklist and trend bars. Finishing a task should feel
 // like something: the box ticks, a line strikes through, the task
 // sinks to the bottom and the ring fills a little more.
 // ─────────────────────────────────────────────────────────────
@@ -22,29 +22,6 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 // mounted, so every gradient gets its own.
 function useSvgId(prefix) {
   return prefix + useId().replace(/[^a-zA-Z0-9]/g, '');
-}
-
-// A soft colour light behind a screen's top area.
-export function Glow({ colors = [SPECTRUM[5], SPECTRUM[4]], height = 360, opacity = 0.35 }) {
-  const id = useSvgId('glow');
-  return (
-    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { height }]}>
-      <Svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
-        <Defs>
-          {colors.map((c, i) => (
-            <RadialGradient key={i} id={`${id}-${i}`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0" stopColor={c} stopOpacity={opacity} />
-              <Stop offset="1" stopColor={c} stopOpacity={0} />
-            </RadialGradient>
-          ))}
-        </Defs>
-        {colors.map((c, i) => {
-          const x = colors.length === 1 ? 50 : 20 + (60 * i) / (colors.length - 1);
-          return <Rect key={i} x={x - 55} y={-45} width={110} height={110} fill={`url(#${id}-${i})`} />;
-        })}
-      </Svg>
-    </View>
-  );
 }
 
 // Fraction 0–1 as a ring in the spectrum colours, with the percentage

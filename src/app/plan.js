@@ -3,7 +3,8 @@ import { ActivityIndicator, Animated, Easing, Platform, Pressable, StyleSheet, T
 import { Feather } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { Glow, ProgressRing } from '../../components/Progress';
+import { ProgressRing } from '../../components/Progress';
+import { QuoteCard } from '../../components/QuoteCard';
 import { Button, IconButton, Screen, Segmented, useReducedMotion } from '../../components/ui';
 import { dayInsight } from '../../services/insight';
 import { EVERY_DAY, WEEKDAYS, daysLabel, findRoutine, routinesOn } from '../../services/routines';
@@ -159,7 +160,6 @@ function PlanScreen() {
       title={day === 'today' ? 'Plan today' : 'Plan tomorrow'}
       right={<IconButton name="x" label="Close" onPress={() => router.back()} />}
       back={false}
-      background={<Glow colors={listening ? [DANGER, SPECTRUM[5]] : [SPECTRUM[5], SPECTRUM[3]]} opacity={0.3} height={420} />}
     >
       <Segmented
         label="Day to plan"
@@ -235,6 +235,7 @@ function PlanScreen() {
         onPress={submit}
         style={{ marginTop: 20 }}
       />
+      <QuoteCard style={{ marginTop: 24 }} />
     </Screen>
   );
 }
@@ -384,7 +385,6 @@ function Planned({ result, day, dateKeyStr }) {
       title={day === 'today' ? 'Today' : 'Tomorrow'}
       back={false}
       right={<IconButton name="x" label="Close" onPress={() => router.dismissTo('/')} />}
-      background={<Glow colors={[SPECTRUM[2], SPECTRUM[4], SPECTRUM[5]]} opacity={0.3} height={420} />}
     >
       <View style={styles.done}>
         <View style={styles.doneBadge}>

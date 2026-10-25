@@ -1,16 +1,17 @@
 import { Platform } from 'react-native';
 import { NETWORKS } from './services/brainScience';
 
-// True black, system type, grouped surfaces. Colour always means a
-// brain network (services/brainScience.js); the chrome stays neutral
-// so the day itself is the only colourful thing on screen.
-export const BG = '#000000';
-export const SURFACE = '#141416';
-export const RAISED = '#1F1F23';
-export const LINE = '#2C2C31';
-export const TEXT = '#F5F5F7';
-export const MUTED = '#9A9AA2';
-export const FAINT = '#5E5E66';
+// Every screen sits on the sunrise scenery (components/Scenery.js), so
+// surfaces are warm, dark and slightly see-through to let it show.
+// BG is the deep earth colour under the scenery. Colour on top still
+// means a brain network (services/brainScience.js).
+export const BG = '#120806';
+export const SURFACE = 'rgba(26,14,10,0.82)';
+export const RAISED = 'rgba(54,32,24,0.9)';
+export const LINE = 'rgba(255,214,184,0.14)';
+export const TEXT = '#FBF5EF';
+export const MUTED = '#BCA99B';
+export const FAINT = '#7C685C';
 export const DANGER = '#FF5A52';
 export const SUCCESS = '#4CD97B';
 

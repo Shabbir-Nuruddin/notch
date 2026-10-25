@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
 import { Mark } from '../../components/Mark';
+import { Scenery } from '../../components/Scenery';
 import { Button, Group, IconButton, MAX_WIDTH, Row, Segmented, TimeRow, ToggleRow } from '../../components/ui';
 import { guardAvailable } from '../../modules/notch-guard';
 import { requestNotifications } from '../../services/notify';
@@ -33,6 +34,7 @@ export default function Welcome() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <Scenery progress={0.75} />
       <View style={styles.top}>
         <View style={{ width: 44 }}>{step > 0 && <IconButton name="chevron-left" label="Back" onPress={() => setStep((s) => s - 1)} />}</View>
         <View style={styles.dots} accessibilityLabel={`Step ${step + 1} of ${STEPS.length}`}>

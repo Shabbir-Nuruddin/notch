@@ -1,9 +1,10 @@
-import { Children, useEffect, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Children } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { clockLabel } from '../services/taskEngine';
+import { Scenery } from './Scenery';
 import { BG, DANGER, FAINT, LINE, MUTED, RAISED, SURFACE, TEXT, type } from '../theme';
 
 // ─────────────────────────────────────────────────────────────
@@ -14,19 +15,11 @@ import { BG, DANGER, FAINT, LINE, MUTED, RAISED, SURFACE, TEXT, type } from '../
 
 export const MAX_WIDTH = 640;
 
-export function useReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    AccessibilityInfo.isReduceMotionEnabled?.().then(setReduced).catch(() => {});
-    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', setReduced);
-    return () => sub?.remove?.();
-  }, []);
-  return reduced;
-}
+export { useReducedMotion } from './motion';
 
-// A scrolling screen with a back button and a title. `background`
-// draws behind everything, e.g. a <Glow />.
-export function Screen({ title, back = true, right, children, scroll = true, contentStyle, background }) {
+// A scrolling screen with a back button and a title, over the
+// sunrise scenery unless `background` replaces it.
+export function Screen({ title, back = true, right, children, scroll = true, contentStyle, background = <Scenery /> }) {
   const body = scroll ? (
     <ScrollView contentContainerStyle={[styles.scroll, contentStyle]} keyboardShouldPersistTaps="handled">
       <View style={styles.column}>{children}</View>

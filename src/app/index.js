@@ -6,7 +6,9 @@ import { Redirect, router } from 'expo-router';
 
 import { DayDial } from '../../components/DayDial';
 import { Mark } from '../../components/Mark';
-import { Glow, ProgressRing, TaskChecklist } from '../../components/Progress';
+import { ProgressRing, TaskChecklist } from '../../components/Progress';
+import { QuoteCard } from '../../components/QuoteCard';
+import { Scenery } from '../../components/Scenery';
 import { BlockActions, NetworkTag, blockClock } from '../../components/NowPanel';
 import { Group, IconButton, MAX_WIDTH, Row, Segmented } from '../../components/ui';
 import { guardState } from '../../services/guard';
@@ -50,7 +52,7 @@ function Today() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-      <Glow colors={current ? [networkColor(current.network), SPECTRUM[5]] : [SPECTRUM[4], SPECTRUM[5]]} opacity={0.28} />
+      <Scenery rise />
       <View style={styles.header}>
         <View style={styles.brand}>
           <Mark size={26} />
@@ -94,6 +96,8 @@ function Today() {
           {day === 'today' && taskCount > 0 && (
             <ProgressCard done={taskCount - tasksLeft} total={taskCount} streak={streak} />
           )}
+
+          {day === 'today' && <QuoteCard />}
 
           {behind >= 45 && (
             <Pressable onPress={() => router.push('/plan?day=today')} style={styles.guard} accessibilityRole="button">
@@ -289,9 +293,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 28,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.88)',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: FAINT,
+    backgroundColor: 'rgba(18,8,6,0.55)',
   },
   planButton: {
     width: '100%',

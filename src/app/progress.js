@@ -1,7 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
-import { Glow, ProgressRing, TrendBars } from '../../components/Progress';
+import { ProgressRing, TrendBars } from '../../components/Progress';
+import { QuoteCard } from '../../components/QuoteCard';
 import { Screen } from '../../components/ui';
 import { dayStats, progressSummary } from '../../services/progress';
 import { dateKey } from '../../services/taskEngine';
@@ -17,7 +18,7 @@ export default function Progress() {
   const value = today.tasks ? today.done / today.tasks : 0;
 
   return (
-    <Screen title="Progress" background={<Glow colors={[SPECTRUM[0], SPECTRUM[3], SPECTRUM[5]]} opacity={0.3} height={420} />}>
+    <Screen title="Progress">
       <View style={styles.hero}>
         <ProgressRing value={value} size={200} stroke={18} label={`Today ${Math.round(value * 100)} percent done`}>
           <Text style={[type.hero, type.digits, { fontSize: 48, lineHeight: 54 }]}>{Math.round(value * 100)}%</Text>
@@ -49,6 +50,8 @@ export default function Progress() {
         <Text style={[type.caption, { marginBottom: 16 }]}>Bar height is the share of that day’s tasks you finished.</Text>
         <TrendBars days={summary.recent} />
       </View>
+
+      <QuoteCard />
     </Screen>
   );
 }
